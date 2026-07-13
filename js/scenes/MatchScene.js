@@ -2,9 +2,7 @@
 import { createMatch, resetKickoff, advanceClock, scoreGoal, checkGoal } from '../match.js';
 import { decideAction, computeTargets, applyMovement, stepBall, passOrShoot } from '../ai.js';
 import { PITCH } from '../constants.js';
-import { commentGoal, commentPass, commentShot } from '../commentary.js';
-
-const REAL_SECONDS_PER_HALF = (lenMin) => (lenMin * 60) / 2; // len = full real minutes for 90'
+import { commentGoal, commentPass, commentShot, commentKickoff } from '../commentary.js';
 
 export default class MatchScene extends Phaser.Scene {
   constructor() { super('match'); }
@@ -15,7 +13,6 @@ export default class MatchScene extends Phaser.Scene {
     this.match.phase = 'playing';
     this.gameMinPerRealSec = 90 / (data.lengthMinutes * 60);
     this.paused = false;
-    this.kickoffTimer = 0;
   }
 
   create() {
@@ -27,8 +24,7 @@ export default class MatchScene extends Phaser.Scene {
 
     // player + ball display objects
     this.playerGfx = this.match.players.map((p) => {
-      const color = p.isGK ? p.side === 'A' ? this.teamColor('A', 'gk') : this.teamColor('B', 'gk')
-                           : this.teamColor(p.side, 'kit');
+      const color = p.isGK ? this.teamColor(p.side, 'gk') : this.teamColor(p.side, 'kit');
       const c = this.add.circle(0, 0, 12, Phaser.Display.Color.HexStringToColor(color).color);
       c.setStrokeStyle(2, 0x000000);
       const txt = this.add.text(0, 0, String(p.num), {
@@ -39,14 +35,13 @@ export default class MatchScene extends Phaser.Scene {
     this.ballGfx = this.add.circle(0, 0, 6, 0xffffff).setStrokeStyle(1, 0x000000);
 
     // --- HUD: top scoreboard ---
-    const W2 = this.scale.width;
-    this.add.rectangle(W2/2, 30, W2, 56, 0x111111, 0.9);
-    this.add.text(W2*0.22, 30, this.match.teamA.name, { fontSize: '22px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(W2*0.78, 30, this.match.teamB.name, { fontSize: '22px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-    this.scoreText = this.add.text(W2*0.5, 30, '0 - 0', { fontSize: '26px', color: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5);
-    this.timerText = this.add.text(W2*0.60, 30, "0'", { fontSize: '20px', color: '#fff' }).setOrigin(0.5);
+    this.add.rectangle(W/2, 30, W, 56, 0x111111, 0.9);
+    this.add.text(W*0.22, 30, this.match.teamA.name, { fontSize: '22px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(W*0.78, 30, this.match.teamB.name, { fontSize: '22px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+    this.scoreText = this.add.text(W*0.5, 30, '0 - 0', { fontSize: '26px', color: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5);
+    this.timerText = this.add.text(W*0.60, 30, "0'", { fontSize: '20px', color: '#fff' }).setOrigin(0.5);
 
-    this.pauseBtn = this.add.text(W2 - 90, 30, 'PAUSE', {
+    this.pauseBtn = this.add.text(W - 90, 30, 'PAUSE', {
       fontSize: '18px', color: '#fff', backgroundColor: '#5a4fcf', padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     this.pauseBtn.on('pointerdown', () => {
@@ -55,8 +50,8 @@ export default class MatchScene extends Phaser.Scene {
     });
 
     // --- HUD: bottom commentary bar ---
-    this.add.rectangle(W2/2, this.scale.height - 26, W2, 44, 0xf5b301, 1);
-    this.commentText = this.add.text(W2/2, this.scale.height - 26, 'Kick-off!', {
+    this.add.rectangle(W/2, this.scale.height - 26, W, 44, 0xf5b301, 1);
+    this.commentText = this.add.text(W/2, this.scale.height - 26, commentKickoff(), {
       fontSize: '20px', color: '#1a1a1a', fontStyle: 'bold',
     }).setOrigin(0.5);
 

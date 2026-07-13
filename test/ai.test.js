@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TEAMS } from '../js/teams.js';
 import { createMatch } from '../js/match.js';
 import { nearestPlayer, captureBall, decideAction, computeTargets, applyMovement, stepBall } from '../js/ai.js';
-import { PITCH, CAPTURE_DIST } from '../js/constants.js';
+import { PITCH } from '../js/constants.js';
 
 const mk = () => createMatch(TEAMS[0], TEAMS[1], 2);
 
@@ -98,4 +98,15 @@ test('captureBall: already-owned ball leaves owner unchanged', () => {
   const result = captureBall(m);
   assert.equal(result, 5);
   assert.equal(m.ball.ownerId, 5);
+});
+
+test('stepBall clamps loose ball to pitch on x-axis (wide of goal)', () => {
+  const m = mk();
+  // wide of the goal posts (goal spans ~30.34-37.66), heading off the byline
+  m.ball = { x: 104, y: 5, vx: 50, vy: 0, ownerId: null };
+  // move all players far away so nobody can capture the ball
+  m.players.forEach(p => { p.x = 0; p.y = 0; });
+  stepBall(m, 1);
+  assert.ok(m.ball.x <= PITCH.w, `ball.x should be clamped to <= ${PITCH.w}, got ${m.ball.x}`);
+  assert.equal(m.ball.ownerId, null);
 });

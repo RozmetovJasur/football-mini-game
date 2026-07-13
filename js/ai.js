@@ -112,5 +112,7 @@ export function stepBall(match, dt) {
   b.vx *= decay; b.vy *= decay;
   if (Math.abs(b.vx) < 0.3 && Math.abs(b.vy) < 0.3) { b.vx = 0; b.vy = 0; }
   b.y = clamp(b.y, 0, PITCH.h);
+  b.x = clamp(b.x, 0, PITCH.w);
+  if (b.x === 0 || b.x === PITCH.w) b.vx = 0;
   captureBall(match);
 }
