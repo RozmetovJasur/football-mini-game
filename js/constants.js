@@ -1,0 +1,11 @@
+export const PITCH = { w: 105, h: 68 };
+export const GOAL_HALF_HEIGHT = 3.66;
+export const SHOOT_RANGE = 25;
+export const PASS_RANGE = 35;
+export const CAPTURE_DIST = 2;
+export const P_PASS = 0.5;
+export const PLAYER_SPEED = 14;   // logical units / sec
+export const BALL_FRICTION = 0.85; // velocity kept per sec
+export const PASS_SPEED = 45;
+export const SHOT_SPEED = 60;
+export const HALF_MINUTES = 45;
