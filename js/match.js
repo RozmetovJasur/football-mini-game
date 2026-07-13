@@ -50,7 +50,7 @@ export function advanceClock(match, gameMinutes) {
     swapSides(match);
     events.push('Half Time');
   }
-  if (match.clock >= 2 * HALF_MINUTES) {
+  if (match.clock >= 2 * HALF_MINUTES && match.phase !== 'fulltime') {
     match.phase = 'fulltime';
     events.push('Full Time');
   }

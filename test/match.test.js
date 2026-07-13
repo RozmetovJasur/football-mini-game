@@ -55,3 +55,13 @@ test('checkGoal detects ball crossing goal line within posts', () => {
   m.ball.x = -1; m.ball.y = 34;
   assert.equal(checkGoal(m), 'B');
 });
+
+test('advanceClock fires Full Time only once across repeated calls', () => {
+  const m = mk();
+  advanceClock(m, 45); m.phase = 'playing';   // clear halftime
+  const first = advanceClock(m, 45);           // reaches 90 -> fulltime
+  const second = advanceClock(m, 45);          // already 90
+  assert.equal(first.filter(e => /Full Time/i.test(e)).length, 1);
+  assert.equal(second.filter(e => /Full Time/i.test(e)).length, 0);
+  assert.equal(m.phase, 'fulltime');
+});
