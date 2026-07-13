@@ -56,7 +56,7 @@ export function computeTargets(match) {
   // two nearest non-owners press the ball
   const ranked = match.players
     .map((p, i) => ({ i, d: dist(p.x, p.y, ball.x, ball.y) }))
-    .filter(o => o.i !== ball.ownerId)
+    .filter(o => o.i !== ball.ownerId && !match.players[o.i].isGK)
     .sort((a, b) => a.d - b.d);
   const pressers = new Set([ranked[0]?.i, ranked[1]?.i]);
 
