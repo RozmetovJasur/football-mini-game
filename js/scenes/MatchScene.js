@@ -32,7 +32,8 @@ export default class MatchScene extends Phaser.Scene {
       }).setOrigin(0.5);
       return { c, txt };
     });
-    this.ballGfx = this.add.circle(0, 0, 6, 0xffffff).setStrokeStyle(1, 0x000000);
+    this.makeBallTexture();
+    this.ballGfx = this.add.image(0, 0, 'ball');
 
     // --- HUD: top scoreboard ---
     this.add.rectangle(W/2, 30, W, 56, 0x111111, 0.9);
@@ -65,6 +66,34 @@ export default class MatchScene extends Phaser.Scene {
 
   sx(x) { return this.OX + (x / PITCH.w) * this.FW; }
   sy(y) { return this.OY + (y / PITCH.h) * this.FH; }
+
+  // Generate a classic soccer-ball texture: white sphere with a central black
+  // pentagon and five surrounding pentagons, plus a dark outline.
+  makeBallTexture() {
+    if (this.textures.exists('ball')) return;
+    const R = 11, S = R * 2 + 2, cx = S / 2, cy = S / 2;
+    const g = this.make.graphics({ x: 0, y: 0, add: false });
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(cx, cy, R);
+    const pentagon = (px, py, rad, rotDeg) => {
+      const pts = [];
+      for (let k = 0; k < 5; k++) {
+        const a = (rotDeg + k * 72) * Math.PI / 180;
+        pts.push(new Phaser.Geom.Point(px + Math.cos(a) * rad, py + Math.sin(a) * rad));
+      }
+      g.fillStyle(0x141414, 1);
+      g.fillPoints(pts, true);
+    };
+    pentagon(cx, cy, R * 0.4, -90);                         // center
+    for (let k = 0; k < 5; k++) {                           // ring of five
+      const a = (-90 + k * 72) * Math.PI / 180;
+      pentagon(cx + Math.cos(a) * R * 0.72, cy + Math.sin(a) * R * 0.72, R * 0.24, 90 + k * 72);
+    }
+    g.lineStyle(2, 0x000000, 1);
+    g.strokeCircle(cx, cy, R);
+    g.generateTexture('ball', S, S);
+    g.destroy();
+  }
 
   drawPitch() {
     const g = this.pitch;
