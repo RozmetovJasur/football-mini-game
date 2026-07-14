@@ -1,6 +1,7 @@
 import {
   PITCH, SHOOT_RANGE, PASS_RANGE, CAPTURE_DIST, P_PASS,
   PLAYER_SPEED, BALL_FRICTION, PASS_SPEED, SHOT_SPEED,
+  TURN_RATE, WANDER_AMP, WANDER_FREQ, SEPARATION_DIST, SEPARATION_PUSH,
 } from './constants.js';
 import { formationPositions } from './teams.js';
 
@@ -51,16 +52,33 @@ export function decideAction(match, rng = Math.random) {
   return { type: 'dribble', targetX: p.x + dir * 15, targetY: gy };
 }
 
+// Formation home position in the current-half orientation.
+function formationBase(match, i, side) {
+  const base = formationPositions(i % 11, side);
+  const bx = match.attackDir.A < 0 ? PITCH.w - base.x : base.x;
+  return { x: bx, y: base.y };
+}
+
+// How strongly each role tracks the ball along the x-axis, and its lateral
+// (y) tracking — distinct per role so the team does NOT translate as a rigid
+// grid. DF hold a deeper line, FW push high.
+const X_TRACK = { GK: 0, DF: 0.20, MF: 0.45, FW: 0.65 };
+const Y_TRACK = { GK: 0, DF: 0.15, MF: 0.30, FW: 0.30 };
+const PUSH_WEIGHT = { GK: 0, DF: 0.25, MF: 0.6, FW: 1 };
+
 export function computeTargets(match) {
   const { ball } = match;
-  // two nearest non-owners press the ball
+  const owner = ball.ownerId !== null ? match.players[ball.ownerId] : null;
+
+  // two nearest outfield non-owners press the ball (chase it directly)
   const ranked = match.players
     .map((p, i) => ({ i, d: dist(p.x, p.y, ball.x, ball.y) }))
     .filter(o => o.i !== ball.ownerId && !match.players[o.i].isGK)
     .sort((a, b) => a.d - b.d);
   const pressers = new Set([ranked[0]?.i, ranked[1]?.i]);
 
-  return match.players.map((p, i) => {
+  const positional = new Set();
+  const targets = match.players.map((p, i) => {
     if (i === ball.ownerId) {
       const gx = goalX(match, p.side);
       return { x: gx, y: PITCH.h / 2 };          // owner drives to goal
@@ -70,20 +88,63 @@ export function computeTargets(match) {
       return { x: ownGoalX, y: clamp(ball.y, 28, 40) };
     }
     if (pressers.has(i)) return { x: ball.x, y: ball.y };
-    const base = formationPositions(i % 11, p.side);
-    const bx = match.attackDir.A < 0 ? PITCH.w - base.x : base.x;
-    return { x: (bx + ball.x) / 2, y: (base.y + ball.y) / 2 }; // hold shape, drift to ball
+
+    // positional player: role-based movement, individual wander
+    positional.add(i);
+    const base = formationBase(match, i, p.side);
+    const dir = match.attackDir[p.side];
+    const teamHasBall = owner !== null && owner.side === p.side;
+    const xt = X_TRACK[p.role] ?? 0.4;
+    const yt = Y_TRACK[p.role] ?? 0.3;
+    let tx = base.x + (ball.x - base.x) * xt;
+    // attack push forward with possession, drop back without it — role-scaled
+    tx += dir * (teamHasBall ? 7 : -5) * (PUSH_WEIGHT[p.role] ?? 0.5);
+    let ty = base.y + (ball.y - base.y) * yt;
+    // per-player wander: distinct phase per index → no lockstep translation
+    tx += Math.sin(match.clock * WANDER_FREQ + i * 1.7) * WANDER_AMP;
+    ty += Math.cos(match.clock * WANDER_FREQ + i * 2.3) * WANDER_AMP;
+    return { x: clamp(tx, 0, PITCH.w), y: clamp(ty, 0, PITCH.h) };
   });
+
+  // separation: positional players repel nearby teammates so they spread out
+  // and hold distinct lanes instead of clumping into one moving blob.
+  match.players.forEach((p, i) => {
+    if (!positional.has(i)) return;
+    let sx = 0, sy = 0;
+    match.players.forEach((q, j) => {
+      if (j === i || q.side !== p.side) return;
+      const dx = p.x - q.x, dy = p.y - q.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0 && d < SEPARATION_DIST) {
+        sx += (dx / d) * (SEPARATION_DIST - d);
+        sy += (dy / d) * (SEPARATION_DIST - d);
+      }
+    });
+    targets[i].x = clamp(targets[i].x + sx * SEPARATION_PUSH, 0, PITCH.w);
+    targets[i].y = clamp(targets[i].y + sy * SEPARATION_PUSH, 0, PITCH.h);
+  });
+
+  return targets;
 }
 
+// Move players toward their targets with velocity inertia (smooth acceleration
+// and turning) rather than snapping straight, so motion looks natural.
 export function applyMovement(match, targets, dt) {
+  const agility = 1 - Math.pow(1 - TURN_RATE, dt); // frame-rate independent steer
   match.players.forEach((p, i) => {
     const t = targets[i];
     const dx = t.x - p.x, dy = t.y - p.y;
-    const d = Math.hypot(dx, dy) || 1;
-    const step = Math.min(PLAYER_SPEED * dt, d);
-    p.x = clamp(p.x + (dx / d) * step, 0, PITCH.w);
-    p.y = clamp(p.y + (dy / d) * step, 0, PITCH.h);
+    const d = Math.hypot(dx, dy);
+    let dvx = 0, dvy = 0;
+    if (d > 0.001) {
+      const speed = Math.min(PLAYER_SPEED, d / dt); // never overshoot the target
+      dvx = (dx / d) * speed;
+      dvy = (dy / d) * speed;
+    }
+    p.vx = (p.vx || 0) + (dvx - (p.vx || 0)) * agility;
+    p.vy = (p.vy || 0) + (dvy - (p.vy || 0)) * agility;
+    p.x = clamp(p.x + p.vx * dt, 0, PITCH.w);
+    p.y = clamp(p.y + p.vy * dt, 0, PITCH.h);
   });
 }
 

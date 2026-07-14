@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TEAMS } from '../js/teams.js';
 import { createMatch } from '../js/match.js';
 import { nearestPlayer, captureBall, decideAction, computeTargets, applyMovement, stepBall } from '../js/ai.js';
-import { PITCH } from '../js/constants.js';
+import { PITCH, PLAYER_SPEED } from '../js/constants.js';
 
 const mk = () => createMatch(TEAMS[0], TEAMS[1], 2);
 
@@ -98,6 +98,38 @@ test('captureBall: already-owned ball leaves owner unchanged', () => {
   const result = captureBall(m);
   assert.equal(result, 5);
   assert.equal(m.ball.ownerId, 5);
+});
+
+test('players do not track the ball in lockstep (role-based, non-parallel)', () => {
+  const m = mk();
+  const t0 = computeTargets(m);
+  m.ball.x += 10; m.ball.y += 5;            // ball moves; players unchanged
+  const t1 = computeTargets(m);
+  // shift of each target caused purely by the ball move (wander/separation
+  // depend on clock & player positions, both unchanged, so they cancel out)
+  const posIdx = m.players.map((_, i) => i).filter(i => {
+    if (m.players[i].isGK || i === m.ball.ownerId) return false;
+    if (t1[i].x === m.ball.x && t1[i].y === m.ball.y) return false; // exclude pressers
+    return true;
+  });
+  const uniq = new Set(posIdx.map(i =>
+    `${(t1[i].x - t0[i].x).toFixed(3)},${(t1[i].y - t0[i].y).toFixed(3)}`));
+  assert.ok(uniq.size > 1,
+    'positional players must shift by role-dependent amounts, not one identical vector');
+});
+
+test('applyMovement uses velocity inertia (does not snap straight to target)', () => {
+  const m = mk();
+  m.players[5].x = 40; m.players[5].y = 34; m.players[5].vx = 0; m.players[5].vy = 0;
+  const targets = m.players.map((p) => ({ x: p.x, y: p.y }));
+  targets[5] = { x: 60, y: 34 };            // far target on +x
+  applyMovement(m, targets, 0.1);
+  // with inertia, one short step covers less than the full PLAYER_SPEED*dt
+  const moved = m.players[5].x - 40;
+  assert.ok(moved > 0, 'player should start moving toward target');
+  assert.ok(moved < PLAYER_SPEED * 0.1,
+    'inertia should make the first step smaller than the max un-damped step');
+  assert.ok(m.players[5].vx > 0, 'player should have gained forward velocity');
 });
 
 test('stepBall clamps loose ball to pitch on x-axis (wide of goal)', () => {
