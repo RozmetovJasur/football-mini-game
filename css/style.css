@@ -1,4 +1,5 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; background: #1a1a1a; overflow: hidden; }
-#game { width: 100vw; height: 100vh; }
+#game { width: 100vw; height: 100vh; position: relative; }
+#game canvas { position: relative; z-index: 1; }   /* Phaser HUD above the 3D view */
 canvas { display: block; margin: 0 auto; }

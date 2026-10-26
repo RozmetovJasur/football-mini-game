@@ -5,7 +5,7 @@ import MatchScene from './scenes/MatchScene.js';
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  backgroundColor: '#1a1a1a',
+  transparent: true,   // the 3D match view shows through from underneath
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
